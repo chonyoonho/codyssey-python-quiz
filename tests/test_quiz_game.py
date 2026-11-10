@@ -158,5 +158,64 @@ class QuizGameTest(unittest.TestCase):
         self.assertTrue(self.path.exists())  # 종료 전에 저장됨
 
 
+class ReverseRng:
+    """sample()이 항상 목록을 거꾸로 돌려주는 가짜 무작위 도구. (순서를 예측하려고 사용)"""
+
+    def sample(self, population, k):
+        return list(reversed(population))[:k]
+
+
+class PlayOrderAndCountTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+
+    def make_game(self, rng=None):
+        game, _ = quiet(QuizGame, self.path, rng)
+        # 정답이 모두 1번인 퀴즈 3개 (문제 이름: Q-A, Q-B, Q-C)
+        game.quizzes = [
+            Quiz(name, ["정답", "오답", "오답", "오답"], 1) for name in ("Q-A", "Q-B", "Q-C")
+        ]
+        return game
+
+    def play(self, game, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            _, output = quiet(game.play_quiz)
+        return output
+
+    def test_questions_are_asked_in_random_order(self):
+        game = self.make_game(rng=ReverseRng())
+        output = self.play(game, ["3", "1", "1", "1"])
+        self.assertLess(output.index("Q-C"), output.index("Q-B"))
+        self.assertLess(output.index("Q-B"), output.index("Q-A"))
+
+    def test_real_random_keeps_every_quiz_once(self):
+        game = self.make_game()
+        output = self.play(game, ["3", "1", "1", "1"])
+        for name in ("Q-A", "Q-B", "Q-C"):
+            self.assertEqual(output.count(name), 1)
+
+    def test_player_can_choose_question_count(self):
+        game = self.make_game()
+        output = self.play(game, ["2", "1", "1"])
+        self.assertIn("총 2문제", output)
+        self.assertIn("2문제 중 2문제 정답", output)
+
+    def test_count_input_is_validated(self):
+        game = self.make_game()
+        # 빈 입력, 문자, 0, 범위 초과(4)를 모두 거절한 뒤 1문제를 선택
+        output = self.play(game, ["", "abc", "0", "4", "1", "1"])
+        self.assertEqual(output.count("  ! "), 4)  # 경고 메시지(앞에 '  ! ')만 센다
+        self.assertIn("총 1문제", output)
+
+    def test_single_quiz_skips_count_question(self):
+        game = self.make_game()
+        game.quizzes = game.quizzes[:1]
+        output = self.play(game, ["1"])
+        self.assertNotIn("풀 문제 수", output)
+        self.assertIn("총 1문제", output)
+
+
 if __name__ == "__main__":
     unittest.main()

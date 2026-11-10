@@ -2,6 +2,7 @@
 
 import json
 import os
+import random
 from pathlib import Path
 
 from default_quizzes import create_default_quizzes
@@ -22,8 +23,10 @@ class QuizGame:
 
     EXIT_MENU = 5
 
-    def __init__(self, state_path=STATE_FILE):
+    def __init__(self, state_path=STATE_FILE, rng=None):
         self.state_path = Path(state_path)
+        # rng: 무작위로 뽑는 도구. 테스트할 때 정해진 순서를 쓰려고 바깥에서 바꿀 수 있게 했다.
+        self.rng = rng if rng is not None else random.Random()
         self.quizzes = []
         self.best_score = None
         self.load_state()
@@ -120,16 +123,25 @@ class QuizGame:
         print("5. 종료")
         print("-" * 36)
 
+    def choose_quiz_count(self):
+        """이번에 풀 문제 수를 고르게 한다. 퀴즈가 1개뿐이면 묻지 않고 1을 돌려준다."""
+        available = len(self.quizzes)
+        if available == 1:
+            return 1
+        return read_int(f"풀 문제 수를 선택하세요 (1~{available}): ", 1, available)
+
     def play_quiz(self):
-        """저장된 퀴즈를 차례로 출제하고, 정답/오답 여부를 알려 준다."""
+        """퀴즈를 무작위 순서로 출제하고, 정답/오답 여부를 알려 준다."""
         if not self.quizzes:
             print("\n등록된 퀴즈가 없습니다. 먼저 '퀴즈 추가'로 퀴즈를 등록해 주세요.")
             return
 
-        total = len(self.quizzes)
+        total = self.choose_quiz_count()
+        # sample: 전체에서 total개를 겹치지 않게 뽑는다. 뽑힌 순서가 곧 출제 순서(무작위)이다.
+        selected = self.rng.sample(self.quizzes, total)
         correct = 0
-        print(f"\n퀴즈를 시작합니다! 총 {total}문제입니다.")
-        for number, quiz in enumerate(self.quizzes, start=1):
+        print(f"\n퀴즈를 시작합니다! 총 {total}문제입니다. (문제 순서는 무작위)")
+        for number, quiz in enumerate(selected, start=1):
             quiz.display(number)
             user_answer = read_int("정답 번호 (1~4): ", 1, Quiz.CHOICE_COUNT)
             if quiz.is_correct(user_answer):
