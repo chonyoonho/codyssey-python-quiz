@@ -136,3 +136,5 @@ codyssey-python-quiz/
 ```text
 git log --oneline --graph
 ```
+
+clone/pull 실습: 저장소를 별도 폴더에 `git clone`한 뒤 이 줄을 추가해 push했고, 원래 작업 폴더에서 `git pull`로 가져왔습니다.
