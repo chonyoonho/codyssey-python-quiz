@@ -31,3 +31,41 @@ class Quiz:
     def answer_text(self):
         """정답을 '2번 대규모 언어 모델(LLM)' 같은 문자열로 돌려준다."""
         return f"{self.answer}번 {self.choices[self.answer - 1]}"
+
+    def to_dict(self):
+        """JSON 파일에 저장할 수 있도록 딕셔너리로 바꾼다."""
+        return {
+            "question": self.question,
+            "choices": list(self.choices),
+            "answer": self.answer,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        """딕셔너리에서 Quiz 객체를 만든다.
+
+        형식이 잘못된 데이터(손상된 파일 등)이면 ValueError를 일으킨다.
+        """
+        if not isinstance(data, dict):
+            raise ValueError("퀴즈 항목이 딕셔너리 형식이 아닙니다.")
+
+        question = data.get("question")
+        choices = data.get("choices")
+        answer = data.get("answer")
+
+        if not isinstance(question, str) or not question.strip():
+            raise ValueError("question(문제)이 올바르지 않습니다.")
+        if (
+            not isinstance(choices, list)
+            or len(choices) != cls.CHOICE_COUNT
+            or not all(isinstance(choice, str) and choice.strip() for choice in choices)
+        ):
+            raise ValueError(f"choices(선택지)는 문자열 {cls.CHOICE_COUNT}개여야 합니다.")
+        if (
+            isinstance(answer, bool)
+            or not isinstance(answer, int)
+            or not 1 <= answer <= cls.CHOICE_COUNT
+        ):
+            raise ValueError(f"answer(정답)는 1~{cls.CHOICE_COUNT} 사이의 정수여야 합니다.")
+
+        return cls(question, choices, answer)
