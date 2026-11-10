@@ -6,7 +6,14 @@ from quiz import Quiz
 
 
 class QuizGame:
-    """메뉴를 보여 주고, 사용자가 고른 기능을 실행하는 게임 클래스."""
+    """퀴즈 목록과 최고 점수를 관리하고, 메뉴에 따라 기능을 실행하는 게임 클래스.
+
+    속성:
+        quizzes:    Quiz 객체 리스트
+        best_score: 최고 점수 (100점 만점, 아직 안 풀었으면 None)
+    """
+
+    EXIT_MENU = 5
 
     def __init__(self):
         self.quizzes = create_default_quizzes()
@@ -99,19 +106,29 @@ class QuizGame:
             print(f"{number}. {quiz.question}")
             print(f"   정답: {quiz.answer_text()}")
 
-    def run(self):
-        """프로그램을 시작한다. 종료(5)를 고를 때까지 메뉴를 반복한다."""
+    def menu_loop(self):
+        """메뉴를 반복해서 보여 주고, 고른 번호의 기능을 실행한다. (종료는 5번)"""
+        actions = {
+            1: self.play_quiz,
+            2: self.add_quiz,
+            3: self.show_quiz_list,
+            4: self.show_score,
+        }
         while True:
             self.show_menu()
-            choice = read_int("메뉴 번호를 선택하세요 (1~5): ", 1, 5)
-            if choice == 1:
-                self.play_quiz()
-            elif choice == 2:
-                self.add_quiz()
-            elif choice == 3:
-                self.show_quiz_list()
-            elif choice == 4:
-                self.show_score()
-            else:
-                print("\n퀴즈 게임을 종료합니다. 안녕히 가세요!")
-                break
+            choice = read_int(f"메뉴 번호를 선택하세요 (1~{self.EXIT_MENU}): ", 1, self.EXIT_MENU)
+            if choice == self.EXIT_MENU:
+                return
+            actions[choice]()
+
+    def run(self):
+        """프로그램을 시작한다.
+
+        Ctrl+C(KeyboardInterrupt)나 입력 스트림 종료(EOFError)가 일어나도
+        오류 화면 없이 안내 메시지를 보여 주고 안전하게 끝낸다.
+        """
+        try:
+            self.menu_loop()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n입력이 중단되었습니다. 안전하게 종료합니다.")
+        print("퀴즈 게임을 종료합니다. 안녕히 가세요!")
