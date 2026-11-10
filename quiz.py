@@ -8,14 +8,16 @@ class Quiz:
         question: 문제 (문자열)
         choices:  선택지 4개 (문자열 리스트)
         answer:   정답 번호 (1~4 중 하나, 정수)
+        hint:     힌트 (문자열, 힌트가 없으면 빈 문자열)
     """
 
     CHOICE_COUNT = 4
 
-    def __init__(self, question, choices, answer):
+    def __init__(self, question, choices, answer, hint=""):
         self.question = question
         self.choices = choices
         self.answer = answer
+        self.hint = hint
 
     def display(self, number=None):
         """문제와 선택지를 화면에 출력한다."""
@@ -38,6 +40,7 @@ class Quiz:
             "question": self.question,
             "choices": list(self.choices),
             "answer": self.answer,
+            "hint": self.hint,
         }
 
     @classmethod
@@ -52,6 +55,8 @@ class Quiz:
         question = data.get("question")
         choices = data.get("choices")
         answer = data.get("answer")
+        # hint는 나중에 추가된 항목이라, 없는 옛 파일도 읽을 수 있게 기본값을 빈 문자열로 둔다.
+        hint = data.get("hint", "")
 
         if not isinstance(question, str) or not question.strip():
             raise ValueError("question(문제)이 올바르지 않습니다.")
@@ -67,5 +72,7 @@ class Quiz:
             or not 1 <= answer <= cls.CHOICE_COUNT
         ):
             raise ValueError(f"answer(정답)는 1~{cls.CHOICE_COUNT} 사이의 정수여야 합니다.")
+        if not isinstance(hint, str):
+            raise ValueError("hint(힌트)는 문자열이어야 합니다.")
 
-        return cls(question, choices, answer)
+        return cls(question, choices, answer, hint)

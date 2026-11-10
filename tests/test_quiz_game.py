@@ -6,6 +6,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -100,7 +101,7 @@ class QuizGameTest(unittest.TestCase):
         quiet(game.save_state)
         text = self.path.read_text(encoding="utf-8")
         data = json.loads(text)
-        self.assertEqual(set(data), {"quizzes", "best_score"})
+        self.assertEqual(set(data), {"quizzes", "best_score", "history"})
         self.assertIn("대규모 언어 모델", text)  # 한글이 \\u 코드가 아닌 글자로 저장됨
 
     def test_corrupted_file_is_recovered(self):
@@ -156,6 +157,289 @@ class QuizGameTest(unittest.TestCase):
                     _, output = quiet(game.run)
                 self.assertIn("안전하게 종료", output)
         self.assertTrue(self.path.exists())  # 종료 전에 저장됨
+
+
+class HintDataTest(unittest.TestCase):
+    def test_hint_is_saved_in_dict(self):
+        quiz = Quiz("문제", ["a", "b", "c", "d"], 1, "힌트 내용")
+        self.assertEqual(quiz.to_dict()["hint"], "힌트 내용")
+        self.assertEqual(Quiz.from_dict(quiz.to_dict()).hint, "힌트 내용")
+
+    def test_old_data_without_hint_still_loads(self):
+        old_format = {"question": "q", "choices": ["a", "b", "c", "d"], "answer": 2}
+        self.assertEqual(Quiz.from_dict(old_format).hint, "")
+
+    def test_non_string_hint_is_rejected(self):
+        bad = {"question": "q", "choices": ["a", "b", "c", "d"], "answer": 2, "hint": 5}
+        with self.assertRaises(ValueError):
+            Quiz.from_dict(bad)
+
+    def test_default_quizzes_have_hints(self):
+        from default_quizzes import create_default_quizzes
+
+        for quiz in create_default_quizzes():
+            self.assertTrue(quiz.hint, quiz.question)
+
+    def test_read_text_allow_empty(self):
+        with mock.patch("builtins.input", side_effect=["   "]):
+            text, _ = quiet(read_text, "> ", allow_empty=True)
+        self.assertEqual(text, "")
+
+    def test_add_quiz_with_and_without_hint(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        game, _ = quiet(QuizGame, Path(folder.name) / "state.json")
+        count = len(game.quizzes)
+
+        with mock.patch("builtins.input", side_effect=["Q1", "a", "b", "c", "d", "2", "힌트!"]):
+            quiet(game.add_quiz)
+        with mock.patch("builtins.input", side_effect=["Q2", "a", "b", "c", "d", "3", ""]):
+            quiet(game.add_quiz)
+
+        self.assertEqual(len(game.quizzes), count + 2)
+        self.assertEqual(game.quizzes[-2].hint, "힌트!")
+        self.assertEqual(game.quizzes[-1].hint, "")
+
+
+class ReverseRng:
+    """sample()이 항상 목록을 거꾸로 돌려주는 가짜 무작위 도구. (순서를 예측하려고 사용)"""
+
+    def sample(self, population, k):
+        return list(reversed(population))[:k]
+
+
+class PlayOrderAndCountTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+
+    def make_game(self, rng=None):
+        game, _ = quiet(QuizGame, self.path, rng)
+        # 정답이 모두 1번인 퀴즈 3개 (문제 이름: Q-A, Q-B, Q-C)
+        game.quizzes = [
+            Quiz(name, ["정답", "오답", "오답", "오답"], 1) for name in ("Q-A", "Q-B", "Q-C")
+        ]
+        return game
+
+    def play(self, game, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            _, output = quiet(game.play_quiz)
+        return output
+
+    def test_questions_are_asked_in_random_order(self):
+        game = self.make_game(rng=ReverseRng())
+        output = self.play(game, ["3", "1", "1", "1"])
+        self.assertLess(output.index("Q-C"), output.index("Q-B"))
+        self.assertLess(output.index("Q-B"), output.index("Q-A"))
+
+    def test_real_random_keeps_every_quiz_once(self):
+        game = self.make_game()
+        output = self.play(game, ["3", "1", "1", "1"])
+        for name in ("Q-A", "Q-B", "Q-C"):
+            self.assertEqual(output.count(name), 1)
+
+    def test_player_can_choose_question_count(self):
+        game = self.make_game()
+        output = self.play(game, ["2", "1", "1"])
+        self.assertIn("총 2문제", output)
+        self.assertIn("2문제 중 2문제 정답", output)
+
+    def test_count_input_is_validated(self):
+        game = self.make_game()
+        # 빈 입력, 문자, 0, 범위 초과(4)를 모두 거절한 뒤 1문제를 선택
+        output = self.play(game, ["", "abc", "0", "4", "1", "1"])
+        self.assertEqual(output.count("  ! "), 4)  # 경고 메시지(앞에 '  ! ')만 센다
+        self.assertIn("총 1문제", output)
+
+    def test_single_quiz_skips_count_question(self):
+        game = self.make_game()
+        game.quizzes = game.quizzes[:1]
+        output = self.play(game, ["1"])
+        self.assertNotIn("풀 문제 수", output)
+        self.assertIn("총 1문제", output)
+
+    # ----- 힌트 -----
+    def give_hints(self, game):
+        for quiz in game.quizzes:
+            quiz.hint = "여기가 힌트"
+
+    def test_hint_correct_answer_gets_half_score(self):
+        game = self.make_game()
+        self.give_hints(game)
+        # 2문제 선택 -> 첫 문제는 힌트(h) 후 정답, 둘째는 바로 정답
+        output = self.play(game, ["2", "h", "1", "1"])
+        self.assertIn("[힌트] 여기가 힌트", output)
+        self.assertIn("힌트 사용: 1회", output)
+        self.assertIn("2문제 중 2문제 정답", output)
+        self.assertIn("이번 점수: 75점", output)  # (0.5 + 1) / 2 * 100
+
+    def test_viewing_hint_twice_counts_once(self):
+        game = self.make_game()
+        self.give_hints(game)
+        output = self.play(game, ["1", "h", "h", "1"])
+        self.assertIn("힌트 사용: 1회", output)
+        self.assertIn("이번 점수: 50점", output)
+
+    def test_hint_with_wrong_answer_gets_zero(self):
+        game = self.make_game()
+        self.give_hints(game)
+        output = self.play(game, ["1", "h", "2"])
+        self.assertIn("이번 점수: 0점", output)
+
+    def test_quiz_without_hint_rejects_h(self):
+        game = self.make_game()  # 힌트가 없는 퀴즈
+        output = self.play(game, ["1", "h", "1"])
+        self.assertNotIn("[힌트]", output)
+        self.assertEqual(output.count("  ! "), 1)
+        self.assertIn("이번 점수: 100점", output)
+
+    def test_read_int_accepts_command(self):
+        with mock.patch("builtins.input", side_effect=[" H "]):
+            value, _ = quiet(read_int, "> ", 1, 4, ("h",))
+        self.assertEqual(value, "h")
+
+    def test_half_points_score(self):
+        self.assertEqual(QuizGame.calculate_score(7.5, 8), 94)
+        self.assertEqual(QuizGame.calculate_score(0.5, 1), 50)
+
+
+class DeleteQuizTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+        self.game, _ = quiet(QuizGame, self.path)
+        self.original_count = len(self.game.quizzes)
+
+    def run_manage(self, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            _, output = quiet(self.game.manage_quiz_list)
+        return output
+
+    def test_delete_quiz_and_save_to_file(self):
+        removed = self.game.quizzes[0].question
+        output = self.run_manage(["1", "1"])  # 1번 퀴즈 선택 -> 삭제 확인
+        self.assertIn("삭제했습니다", output)
+        self.assertEqual(len(self.game.quizzes), self.original_count - 1)
+
+        again, _ = quiet(QuizGame, self.path)  # 다시 시작해도 삭제 상태가 유지됨
+        self.assertEqual(len(again.quizzes), self.original_count - 1)
+        self.assertNotIn(removed, [quiz.question for quiz in again.quizzes])
+
+    def test_zero_and_cancel_do_not_delete(self):
+        self.run_manage(["0"])
+        output = self.run_manage(["2", "2"])  # 2번 선택 -> 취소
+        self.assertIn("취소했습니다", output)
+        self.assertEqual(len(self.game.quizzes), self.original_count)
+
+    def test_delete_number_is_validated(self):
+        output = self.run_manage(["", "abc", "99", "-1", "0"])
+        self.assertEqual(output.count("  ! "), 4)
+        self.assertEqual(len(self.game.quizzes), self.original_count)
+
+    def test_deleting_all_quizzes_is_handled(self):
+        for _ in range(self.original_count):
+            self.run_manage(["1", "1"])
+        self.assertEqual(self.game.quizzes, [])
+
+        output = self.run_manage([])  # 퀴즈가 없으면 삭제 질문 없이 안내만 나온다
+        self.assertIn("등록된 퀴즈가 없습니다", output)
+        with mock.patch("builtins.input", side_effect=[]):
+            _, output = quiet(self.game.play_quiz)
+        self.assertIn("등록된 퀴즈가 없습니다", output)
+
+        again, _ = quiet(QuizGame, self.path)  # 빈 목록도 정상 저장/복원된다
+        self.assertEqual(again.quizzes, [])
+
+
+class HistoryTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+        self.now = datetime(2026, 11, 10, 19, 40, 12)
+        self.game, _ = quiet(QuizGame, self.path, None, lambda: self.now)
+        # 정답이 모두 1번이고 힌트가 있는 퀴즈 3개
+        self.game.quizzes = [
+            Quiz(f"Q-{name}", ["정답", "오답", "오답", "오답"], 1, "힌트") for name in "ABC"
+        ]
+
+    def play(self, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            quiet(self.game.play_quiz)
+
+    def test_game_is_recorded_with_time_count_and_score(self):
+        self.play(["2", "h", "1", "1"])  # 2문제, 한 문제는 힌트 사용 -> 75점
+        self.assertEqual(
+            self.game.history,
+            [
+                {
+                    "played_at": "2026-11-10 19:40:12",
+                    "total": 2,
+                    "correct": 2,
+                    "hints_used": 1,
+                    "score": 75,
+                }
+            ],
+        )
+
+    def test_history_is_saved_and_restored(self):
+        self.play(["1", "1"])
+        again, _ = quiet(QuizGame, self.path)
+        self.assertEqual(again.history, self.game.history)
+        self.assertEqual(len(again.history), 1)
+
+    def test_every_game_is_kept_not_only_the_best(self):
+        self.play(["1", "1"])  # 100점
+        self.play(["1", "2"])  # 0점 (최고 점수는 그대로)
+        self.assertEqual([record["score"] for record in self.game.history], [100, 0])
+        self.assertEqual(self.game.best_score, 100)
+
+    def test_score_screen_shows_recent_records_newest_first(self):
+        for minute in range(7):
+            self.now = datetime(2026, 11, 10, 19, minute, 0)
+            self.play(["1", "1"])
+        _, output = quiet(self.game.show_score)
+        self.assertIn("최근 5회 / 전체 7회", output)
+        self.assertIn("(1문제 중 1문제 정답)", output)  # 최고 점수의 상세
+        self.assertLess(output.index("19:06:00"), output.index("19:02:00"))  # 최신순
+        self.assertNotIn("19:01:00", output)  # 5개를 넘는 오래된 기록은 숨김
+
+    def test_old_state_without_history_still_loads(self):
+        old = {"quizzes": [], "best_score": 40}
+        self.path.write_text(json.dumps(old), encoding="utf-8")
+        game, output = quiet(QuizGame, self.path)
+        self.assertEqual(game.history, [])
+        self.assertEqual(game.best_score, 40)
+        self.assertNotIn("복구", output)
+
+    def test_load_message_shows_counts(self):
+        quiet(self.game.save_state)
+        _, output = quiet(QuizGame, self.path)
+        self.assertIn("저장된 데이터를 불러왔습니다. (퀴즈 3개, 최고 점수 없음)", output)
+
+    def test_broken_history_is_recovered(self):
+        good = {"played_at": "2026-11-10 19:40:12", "total": 2, "correct": 1,
+                "hints_used": 0, "score": 50}
+        bad_histories = [
+            "text",
+            ["text"],
+            [{**good, "played_at": ""}],
+            [{**good, "total": 0}],
+            [{**good, "correct": 3}],
+            [{**good, "hints_used": -1}],
+            [{**good, "score": 101}],
+            [{**good, "score": True}],
+            [{key: value for key, value in good.items() if key != "score"}],
+        ]
+        for history in bad_histories:
+            with self.subTest(history=history):
+                state = {"quizzes": [], "best_score": None, "history": history}
+                self.path.write_text(json.dumps(state), encoding="utf-8")
+                game, output = quiet(QuizGame, self.path)
+                self.assertIn("복구", output)
+                self.assertEqual(game.history, [])
 
 
 if __name__ == "__main__":
