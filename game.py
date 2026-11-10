@@ -1,5 +1,6 @@
 """퀴즈 게임 전체를 관리하는 QuizGame 클래스."""
 
+from default_quizzes import create_default_quizzes
 from input_utils import read_int
 
 
@@ -7,7 +8,7 @@ class QuizGame:
     """메뉴를 보여 주고, 사용자가 고른 기능을 실행하는 게임 클래스."""
 
     def __init__(self):
-        self.quizzes = []
+        self.quizzes = create_default_quizzes()
         self.best_score = None
 
     def show_menu(self):
