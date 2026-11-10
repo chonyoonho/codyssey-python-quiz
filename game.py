@@ -41,6 +41,21 @@ class QuizGame:
             else:
                 print(f"  [오답] 아쉽네요. 정답은 {quiz.answer_text()} 입니다.")
 
+        self.show_result(correct, total)
+
+    @staticmethod
+    def calculate_score(correct, total):
+        """정답 수를 100점 만점 점수로 바꾼다. (예: 8문제 중 6개 -> 75점)"""
+        return round(correct / total * 100)
+
+    def show_result(self, correct, total):
+        """모든 문제를 푼 뒤 결과를 보여 준다."""
+        score = self.calculate_score(correct, total)
+        print("\n" + "-" * 36)
+        print(f"결과: {total}문제 중 {correct}문제 정답")
+        print(f"이번 점수: {score}점 (100점 만점)")
+        print("-" * 36)
+
     def run(self):
         """프로그램을 시작한다. 종료(5)를 고를 때까지 메뉴를 반복한다."""
         while True:
