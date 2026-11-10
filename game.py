@@ -2,6 +2,7 @@
 
 from default_quizzes import create_default_quizzes
 from input_utils import read_int
+from quiz import Quiz
 
 
 class QuizGame:
@@ -22,13 +23,31 @@ class QuizGame:
         print("5. 종료")
         print("-" * 36)
 
+    def play_quiz(self):
+        """저장된 퀴즈를 차례로 출제하고, 정답/오답 여부를 알려 준다."""
+        if not self.quizzes:
+            print("\n등록된 퀴즈가 없습니다. 먼저 '퀴즈 추가'로 퀴즈를 등록해 주세요.")
+            return
+
+        total = len(self.quizzes)
+        correct = 0
+        print(f"\n퀴즈를 시작합니다! 총 {total}문제입니다.")
+        for number, quiz in enumerate(self.quizzes, start=1):
+            quiz.display(number)
+            user_answer = read_int("정답 번호 (1~4): ", 1, Quiz.CHOICE_COUNT)
+            if quiz.is_correct(user_answer):
+                print("  [정답] 맞았습니다!")
+                correct += 1
+            else:
+                print(f"  [오답] 아쉽네요. 정답은 {quiz.answer_text()} 입니다.")
+
     def run(self):
         """프로그램을 시작한다. 종료(5)를 고를 때까지 메뉴를 반복한다."""
         while True:
             self.show_menu()
             choice = read_int("메뉴 번호를 선택하세요 (1~5): ", 1, 5)
             if choice == 1:
-                print("\n[준비 중] 퀴즈 풀기 기능은 아직 만들어지지 않았습니다.")
+                self.play_quiz()
             elif choice == 2:
                 print("\n[준비 중] 퀴즈 추가 기능은 아직 만들어지지 않았습니다.")
             elif choice == 3:
