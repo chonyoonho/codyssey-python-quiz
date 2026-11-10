@@ -27,3 +27,7 @@ class Quiz:
     def is_correct(self, user_answer):
         """사용자가 입력한 번호가 정답이면 True, 아니면 False."""
         return user_answer == self.answer
+
+    def answer_text(self):
+        """정답을 '2번 대규모 언어 모델(LLM)' 같은 문자열로 돌려준다."""
+        return f"{self.answer}번 {self.choices[self.answer - 1]}"
