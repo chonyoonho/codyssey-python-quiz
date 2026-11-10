@@ -6,6 +6,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -100,7 +101,7 @@ class QuizGameTest(unittest.TestCase):
         quiet(game.save_state)
         text = self.path.read_text(encoding="utf-8")
         data = json.loads(text)
-        self.assertEqual(set(data), {"quizzes", "best_score"})
+        self.assertEqual(set(data), {"quizzes", "best_score", "history"})
         self.assertIn("대규모 언어 모델", text)  # 한글이 \\u 코드가 아닌 글자로 저장됨
 
     def test_corrupted_file_is_recovered(self):
@@ -350,6 +351,95 @@ class DeleteQuizTest(unittest.TestCase):
 
         again, _ = quiet(QuizGame, self.path)  # 빈 목록도 정상 저장/복원된다
         self.assertEqual(again.quizzes, [])
+
+
+class HistoryTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+        self.now = datetime(2026, 11, 10, 19, 40, 12)
+        self.game, _ = quiet(QuizGame, self.path, None, lambda: self.now)
+        # 정답이 모두 1번이고 힌트가 있는 퀴즈 3개
+        self.game.quizzes = [
+            Quiz(f"Q-{name}", ["정답", "오답", "오답", "오답"], 1, "힌트") for name in "ABC"
+        ]
+
+    def play(self, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            quiet(self.game.play_quiz)
+
+    def test_game_is_recorded_with_time_count_and_score(self):
+        self.play(["2", "h", "1", "1"])  # 2문제, 한 문제는 힌트 사용 -> 75점
+        self.assertEqual(
+            self.game.history,
+            [
+                {
+                    "played_at": "2026-11-10 19:40:12",
+                    "total": 2,
+                    "correct": 2,
+                    "hints_used": 1,
+                    "score": 75,
+                }
+            ],
+        )
+
+    def test_history_is_saved_and_restored(self):
+        self.play(["1", "1"])
+        again, _ = quiet(QuizGame, self.path)
+        self.assertEqual(again.history, self.game.history)
+        self.assertEqual(len(again.history), 1)
+
+    def test_every_game_is_kept_not_only_the_best(self):
+        self.play(["1", "1"])  # 100점
+        self.play(["1", "2"])  # 0점 (최고 점수는 그대로)
+        self.assertEqual([record["score"] for record in self.game.history], [100, 0])
+        self.assertEqual(self.game.best_score, 100)
+
+    def test_score_screen_shows_recent_records_newest_first(self):
+        for minute in range(7):
+            self.now = datetime(2026, 11, 10, 19, minute, 0)
+            self.play(["1", "1"])
+        _, output = quiet(self.game.show_score)
+        self.assertIn("최근 5회 / 전체 7회", output)
+        self.assertIn("(1문제 중 1문제 정답)", output)  # 최고 점수의 상세
+        self.assertLess(output.index("19:06:00"), output.index("19:02:00"))  # 최신순
+        self.assertNotIn("19:01:00", output)  # 5개를 넘는 오래된 기록은 숨김
+
+    def test_old_state_without_history_still_loads(self):
+        old = {"quizzes": [], "best_score": 40}
+        self.path.write_text(json.dumps(old), encoding="utf-8")
+        game, output = quiet(QuizGame, self.path)
+        self.assertEqual(game.history, [])
+        self.assertEqual(game.best_score, 40)
+        self.assertNotIn("복구", output)
+
+    def test_load_message_shows_counts(self):
+        quiet(self.game.save_state)
+        _, output = quiet(QuizGame, self.path)
+        self.assertIn("저장된 데이터를 불러왔습니다. (퀴즈 3개, 최고 점수 없음)", output)
+
+    def test_broken_history_is_recovered(self):
+        good = {"played_at": "2026-11-10 19:40:12", "total": 2, "correct": 1,
+                "hints_used": 0, "score": 50}
+        bad_histories = [
+            "text",
+            ["text"],
+            [{**good, "played_at": ""}],
+            [{**good, "total": 0}],
+            [{**good, "correct": 3}],
+            [{**good, "hints_used": -1}],
+            [{**good, "score": 101}],
+            [{**good, "score": True}],
+            [{key: value for key, value in good.items() if key != "score"}],
+        ]
+        for history in bad_histories:
+            with self.subTest(history=history):
+                state = {"quizzes": [], "best_score": None, "history": history}
+                self.path.write_text(json.dumps(state), encoding="utf-8")
+                game, output = quiet(QuizGame, self.path)
+                self.assertIn("복구", output)
+                self.assertEqual(game.history, [])
 
 
 if __name__ == "__main__":
