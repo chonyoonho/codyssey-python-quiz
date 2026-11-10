@@ -54,7 +54,25 @@ class QuizGame:
         print("\n" + "-" * 36)
         print(f"결과: {total}문제 중 {correct}문제 정답")
         print(f"이번 점수: {score}점 (100점 만점)")
+        if self.update_best_score(score):
+            print("새로운 최고 점수입니다! 축하합니다!")
+        else:
+            print(f"현재 최고 점수는 {self.best_score}점입니다.")
         print("-" * 36)
+
+    def update_best_score(self, score):
+        """이번 점수가 최고 점수보다 높으면 갱신하고 True를 돌려준다."""
+        if self.best_score is None or score > self.best_score:
+            self.best_score = score
+            return True
+        return False
+
+    def show_score(self):
+        """최고 점수를 보여 준다. 아직 퀴즈를 풀지 않았다면 안내한다."""
+        if self.best_score is None:
+            print("\n아직 퀴즈를 풀지 않았습니다. '퀴즈 풀기'에 도전해 보세요!")
+        else:
+            print(f"\n최고 점수: {self.best_score}점 (100점 만점)")
 
     def add_quiz(self):
         """문제, 선택지 4개, 정답 번호를 입력받아 새 퀴즈를 등록한다."""
@@ -93,7 +111,7 @@ class QuizGame:
             elif choice == 3:
                 self.show_quiz_list()
             elif choice == 4:
-                print("\n[준비 중] 점수 확인 기능은 아직 만들어지지 않았습니다.")
+                self.show_score()
             else:
                 print("\n퀴즈 게임을 종료합니다. 안녕히 가세요!")
                 break
