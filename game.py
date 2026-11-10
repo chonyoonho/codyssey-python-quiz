@@ -119,7 +119,7 @@ class QuizGame:
         print("=" * 36)
         print("1. 퀴즈 풀기")
         print("2. 퀴즈 추가")
-        print("3. 퀴즈 목록")
+        print("3. 퀴즈 목록 / 삭제")
         print("4. 점수 확인")
         print("5. 종료")
         print("-" * 36)
@@ -249,12 +249,35 @@ class QuizGame:
             if quiz.hint:
                 print(f"   힌트: {quiz.hint}")
 
+    def manage_quiz_list(self):
+        """퀴즈 목록을 보여 준 뒤, 원하면 이어서 퀴즈를 삭제할 수 있게 한다."""
+        self.show_quiz_list()
+        if self.quizzes:
+            self.delete_quiz()
+
+    def delete_quiz(self):
+        """삭제할 퀴즈 번호를 입력받아 지우고, 바로 파일에 반영한다."""
+        count = len(self.quizzes)
+        number = read_int(f"삭제할 퀴즈 번호 (1~{count}, 삭제하지 않으려면 0): ", 0, count)
+        if number == 0:
+            return
+
+        quiz = self.quizzes[number - 1]
+        print(f"삭제할 퀴즈: {quiz.question}")
+        if read_int("정말 삭제할까요? (1: 삭제, 2: 취소): ", 1, 2) == 2:
+            print("삭제를 취소했습니다.")
+            return
+
+        del self.quizzes[number - 1]
+        print(f"퀴즈를 삭제했습니다. (남은 퀴즈 {len(self.quizzes)}개)")
+        self.save_state()
+
     def menu_loop(self):
         """메뉴를 반복해서 보여 주고, 고른 번호의 기능을 실행한다. (종료는 5번)"""
         actions = {
             1: self.play_quiz,
             2: self.add_quiz,
-            3: self.show_quiz_list,
+            3: self.manage_quiz_list,
             4: self.show_score,
         }
         while True:

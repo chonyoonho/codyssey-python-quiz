@@ -303,5 +303,54 @@ class PlayOrderAndCountTest(unittest.TestCase):
         self.assertEqual(QuizGame.calculate_score(0.5, 1), 50)
 
 
+class DeleteQuizTest(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "state.json"
+        self.game, _ = quiet(QuizGame, self.path)
+        self.original_count = len(self.game.quizzes)
+
+    def run_manage(self, inputs):
+        with mock.patch("builtins.input", side_effect=inputs):
+            _, output = quiet(self.game.manage_quiz_list)
+        return output
+
+    def test_delete_quiz_and_save_to_file(self):
+        removed = self.game.quizzes[0].question
+        output = self.run_manage(["1", "1"])  # 1번 퀴즈 선택 -> 삭제 확인
+        self.assertIn("삭제했습니다", output)
+        self.assertEqual(len(self.game.quizzes), self.original_count - 1)
+
+        again, _ = quiet(QuizGame, self.path)  # 다시 시작해도 삭제 상태가 유지됨
+        self.assertEqual(len(again.quizzes), self.original_count - 1)
+        self.assertNotIn(removed, [quiz.question for quiz in again.quizzes])
+
+    def test_zero_and_cancel_do_not_delete(self):
+        self.run_manage(["0"])
+        output = self.run_manage(["2", "2"])  # 2번 선택 -> 취소
+        self.assertIn("취소했습니다", output)
+        self.assertEqual(len(self.game.quizzes), self.original_count)
+
+    def test_delete_number_is_validated(self):
+        output = self.run_manage(["", "abc", "99", "-1", "0"])
+        self.assertEqual(output.count("  ! "), 4)
+        self.assertEqual(len(self.game.quizzes), self.original_count)
+
+    def test_deleting_all_quizzes_is_handled(self):
+        for _ in range(self.original_count):
+            self.run_manage(["1", "1"])
+        self.assertEqual(self.game.quizzes, [])
+
+        output = self.run_manage([])  # 퀴즈가 없으면 삭제 질문 없이 안내만 나온다
+        self.assertIn("등록된 퀴즈가 없습니다", output)
+        with mock.patch("builtins.input", side_effect=[]):
+            _, output = quiet(self.game.play_quiz)
+        self.assertIn("등록된 퀴즈가 없습니다", output)
+
+        again, _ = quiet(QuizGame, self.path)  # 빈 목록도 정상 저장/복원된다
+        self.assertEqual(again.quizzes, [])
+
+
 if __name__ == "__main__":
     unittest.main()
