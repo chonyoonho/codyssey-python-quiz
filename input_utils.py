@@ -30,11 +30,15 @@ def read_int(prompt, low, high):
         return number
 
 
-def read_text(prompt):
-    """비어 있지 않은 문자열을 입력받아 돌려준다. (앞뒤 공백은 제거)"""
+def read_text(prompt, allow_empty=False):
+    """문자열을 입력받아 돌려준다. (앞뒤 공백은 제거)
+
+    allow_empty가 False(기본)이면 빈 입력을 거절하고 다시 묻는다.
+    True이면 빈 입력도 그대로 받아들인다. (힌트처럼 선택 입력일 때 사용)
+    """
     while True:
         text = input(prompt).strip()
-        if text == "":
+        if text == "" and not allow_empty:
             print("  ! 빈 입력입니다. 내용을 입력해 주세요.")
             continue
         return text

@@ -158,6 +158,48 @@ class QuizGameTest(unittest.TestCase):
         self.assertTrue(self.path.exists())  # 종료 전에 저장됨
 
 
+class HintDataTest(unittest.TestCase):
+    def test_hint_is_saved_in_dict(self):
+        quiz = Quiz("문제", ["a", "b", "c", "d"], 1, "힌트 내용")
+        self.assertEqual(quiz.to_dict()["hint"], "힌트 내용")
+        self.assertEqual(Quiz.from_dict(quiz.to_dict()).hint, "힌트 내용")
+
+    def test_old_data_without_hint_still_loads(self):
+        old_format = {"question": "q", "choices": ["a", "b", "c", "d"], "answer": 2}
+        self.assertEqual(Quiz.from_dict(old_format).hint, "")
+
+    def test_non_string_hint_is_rejected(self):
+        bad = {"question": "q", "choices": ["a", "b", "c", "d"], "answer": 2, "hint": 5}
+        with self.assertRaises(ValueError):
+            Quiz.from_dict(bad)
+
+    def test_default_quizzes_have_hints(self):
+        from default_quizzes import create_default_quizzes
+
+        for quiz in create_default_quizzes():
+            self.assertTrue(quiz.hint, quiz.question)
+
+    def test_read_text_allow_empty(self):
+        with mock.patch("builtins.input", side_effect=["   "]):
+            text, _ = quiet(read_text, "> ", allow_empty=True)
+        self.assertEqual(text, "")
+
+    def test_add_quiz_with_and_without_hint(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        game, _ = quiet(QuizGame, Path(folder.name) / "state.json")
+        count = len(game.quizzes)
+
+        with mock.patch("builtins.input", side_effect=["Q1", "a", "b", "c", "d", "2", "힌트!"]):
+            quiet(game.add_quiz)
+        with mock.patch("builtins.input", side_effect=["Q2", "a", "b", "c", "d", "3", ""]):
+            quiet(game.add_quiz)
+
+        self.assertEqual(len(game.quizzes), count + 2)
+        self.assertEqual(game.quizzes[-2].hint, "힌트!")
+        self.assertEqual(game.quizzes[-1].hint, "")
+
+
 class ReverseRng:
     """sample()이 항상 목록을 거꾸로 돌려주는 가짜 무작위 도구. (순서를 예측하려고 사용)"""
 

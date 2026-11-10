@@ -195,7 +195,9 @@ class QuizGame:
             f"정답 번호 (1~{Quiz.CHOICE_COUNT}): ", 1, Quiz.CHOICE_COUNT
         )
 
-        self.quizzes.append(Quiz(question, choices, answer))
+        hint = read_text("힌트 (없으면 그냥 Enter): ", allow_empty=True)
+
+        self.quizzes.append(Quiz(question, choices, answer, hint))
         print(f"퀴즈가 추가되었습니다. (현재 총 {len(self.quizzes)}개)")
         self.save_state()
 
@@ -209,6 +211,8 @@ class QuizGame:
         for number, quiz in enumerate(self.quizzes, start=1):
             print(f"{number}. {quiz.question}")
             print(f"   정답: {quiz.answer_text()}")
+            if quiz.hint:
+                print(f"   힌트: {quiz.hint}")
 
     def menu_loop(self):
         """메뉴를 반복해서 보여 주고, 고른 번호의 기능을 실행한다. (종료는 5번)"""
