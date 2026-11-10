@@ -70,6 +70,17 @@ class QuizGame:
         self.quizzes.append(Quiz(question, choices, answer))
         print(f"퀴즈가 추가되었습니다. (현재 총 {len(self.quizzes)}개)")
 
+    def show_quiz_list(self):
+        """저장된 퀴즈를 번호와 함께 목록으로 보여 준다."""
+        if not self.quizzes:
+            print("\n등록된 퀴즈가 없습니다. '퀴즈 추가'로 새 퀴즈를 만들어 보세요.")
+            return
+
+        print(f"\n--- 퀴즈 목록 (총 {len(self.quizzes)}개) ---")
+        for number, quiz in enumerate(self.quizzes, start=1):
+            print(f"{number}. {quiz.question}")
+            print(f"   정답: {quiz.answer_text()}")
+
     def run(self):
         """프로그램을 시작한다. 종료(5)를 고를 때까지 메뉴를 반복한다."""
         while True:
@@ -80,7 +91,7 @@ class QuizGame:
             elif choice == 2:
                 self.add_quiz()
             elif choice == 3:
-                print("\n[준비 중] 퀴즈 목록 기능은 아직 만들어지지 않았습니다.")
+                self.show_quiz_list()
             elif choice == 4:
                 print("\n[준비 중] 점수 확인 기능은 아직 만들어지지 않았습니다.")
             else:
