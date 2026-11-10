@@ -1,7 +1,7 @@
 """퀴즈 게임 전체를 관리하는 QuizGame 클래스."""
 
 from default_quizzes import create_default_quizzes
-from input_utils import read_int
+from input_utils import read_int, read_text
 from quiz import Quiz
 
 
@@ -56,6 +56,20 @@ class QuizGame:
         print(f"이번 점수: {score}점 (100점 만점)")
         print("-" * 36)
 
+    def add_quiz(self):
+        """문제, 선택지 4개, 정답 번호를 입력받아 새 퀴즈를 등록한다."""
+        print("\n--- 새 퀴즈 추가 ---")
+        question = read_text("문제: ")
+        choices = []
+        for number in range(1, Quiz.CHOICE_COUNT + 1):
+            choices.append(read_text(f"선택지 {number}: "))
+        answer = read_int(
+            f"정답 번호 (1~{Quiz.CHOICE_COUNT}): ", 1, Quiz.CHOICE_COUNT
+        )
+
+        self.quizzes.append(Quiz(question, choices, answer))
+        print(f"퀴즈가 추가되었습니다. (현재 총 {len(self.quizzes)}개)")
+
     def run(self):
         """프로그램을 시작한다. 종료(5)를 고를 때까지 메뉴를 반복한다."""
         while True:
@@ -64,7 +78,7 @@ class QuizGame:
             if choice == 1:
                 self.play_quiz()
             elif choice == 2:
-                print("\n[준비 중] 퀴즈 추가 기능은 아직 만들어지지 않았습니다.")
+                self.add_quiz()
             elif choice == 3:
                 print("\n[준비 중] 퀴즈 목록 기능은 아직 만들어지지 않았습니다.")
             elif choice == 4:
