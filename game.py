@@ -22,6 +22,7 @@ class QuizGame:
     """
 
     EXIT_MENU = 5
+    HINT_CREDIT = 0.5  # 힌트를 쓰고 맞힌 문제가 인정받는 비율 (0.5 = 절반)
 
     def __init__(self, state_path=STATE_FILE, rng=None):
         self.state_path = Path(state_path)
@@ -139,29 +140,63 @@ class QuizGame:
         total = self.choose_quiz_count()
         # sample: 전체에서 total개를 겹치지 않게 뽑는다. 뽑힌 순서가 곧 출제 순서(무작위)이다.
         selected = self.rng.sample(self.quizzes, total)
-        correct = 0
+        correct = 0  # 맞힌 문제 수
+        hints_used = 0  # 힌트를 본 문제 수
+        earned = 0.0  # 인정받은 점수 (문제당 최대 1점, 힌트를 쓰고 맞히면 0.5점)
         print(f"\n퀴즈를 시작합니다! 총 {total}문제입니다. (문제 순서는 무작위)")
         for number, quiz in enumerate(selected, start=1):
             quiz.display(number)
-            user_answer = read_int("정답 번호 (1~4): ", 1, Quiz.CHOICE_COUNT)
+            user_answer, used_hint = self.ask_answer(quiz)
+            if used_hint:
+                hints_used += 1
             if quiz.is_correct(user_answer):
-                print("  [정답] 맞았습니다!")
                 correct += 1
+                earned += self.HINT_CREDIT if used_hint else 1
+                note = " (힌트를 써서 절반 점수)" if used_hint else ""
+                print(f"  [정답] 맞았습니다!{note}")
             else:
                 print(f"  [오답] 아쉽네요. 정답은 {quiz.answer_text()} 입니다.")
 
-        self.show_result(correct, total)
+        self.show_result(correct, total, earned, hints_used)
+
+    def ask_answer(self, quiz):
+        """정답 번호를 입력받는다. 힌트가 있는 문제는 h를 입력해 힌트를 볼 수 있다.
+
+        (정답 번호, 힌트를 봤는지 여부)를 돌려준다.
+        """
+        if quiz.hint:
+            prompt = f"정답 번호 (1~{Quiz.CHOICE_COUNT}, 힌트 보기: h): "
+            commands = ("h",)
+        else:
+            prompt = f"정답 번호 (1~{Quiz.CHOICE_COUNT}): "
+            commands = ()
+
+        used_hint = False
+        while True:
+            answer = read_int(prompt, 1, Quiz.CHOICE_COUNT, commands)
+            if answer != "h":
+                return answer, used_hint
+            print(f"  [힌트] {quiz.hint}")
+            if not used_hint:
+                percent = int(self.HINT_CREDIT * 100)
+                print(f"  (힌트를 쓰면 이 문제는 맞혀도 {percent}%만 점수로 인정됩니다.)")
+            used_hint = True
 
     @staticmethod
-    def calculate_score(correct, total):
-        """정답 수를 100점 만점 점수로 바꾼다. (예: 8문제 중 6개 -> 75점)"""
-        return round(correct / total * 100)
+    def calculate_score(earned, total):
+        """인정받은 점수를 100점 만점으로 바꾼다. (예: 8문제 중 6개 -> 75점)
 
-    def show_result(self, correct, total):
+        earned는 정답 수와 같은 단위이다. 힌트를 쓰고 맞힌 문제는 0.5로 계산해 넘긴다.
+        """
+        return round(earned / total * 100)
+
+    def show_result(self, correct, total, earned, hints_used):
         """모든 문제를 푼 뒤 결과를 보여 준다."""
-        score = self.calculate_score(correct, total)
+        score = self.calculate_score(earned, total)
         print("\n" + "-" * 36)
         print(f"결과: {total}문제 중 {correct}문제 정답")
+        if hints_used:
+            print(f"힌트 사용: {hints_used}회 (힌트를 쓴 문제는 절반 점수)")
         print(f"이번 점수: {score}점 (100점 만점)")
         if self.update_best_score(score):
             print("새로운 최고 점수입니다! 축하합니다!")

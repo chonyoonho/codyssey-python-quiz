@@ -258,6 +258,50 @@ class PlayOrderAndCountTest(unittest.TestCase):
         self.assertNotIn("풀 문제 수", output)
         self.assertIn("총 1문제", output)
 
+    # ----- 힌트 -----
+    def give_hints(self, game):
+        for quiz in game.quizzes:
+            quiz.hint = "여기가 힌트"
+
+    def test_hint_correct_answer_gets_half_score(self):
+        game = self.make_game()
+        self.give_hints(game)
+        # 2문제 선택 -> 첫 문제는 힌트(h) 후 정답, 둘째는 바로 정답
+        output = self.play(game, ["2", "h", "1", "1"])
+        self.assertIn("[힌트] 여기가 힌트", output)
+        self.assertIn("힌트 사용: 1회", output)
+        self.assertIn("2문제 중 2문제 정답", output)
+        self.assertIn("이번 점수: 75점", output)  # (0.5 + 1) / 2 * 100
+
+    def test_viewing_hint_twice_counts_once(self):
+        game = self.make_game()
+        self.give_hints(game)
+        output = self.play(game, ["1", "h", "h", "1"])
+        self.assertIn("힌트 사용: 1회", output)
+        self.assertIn("이번 점수: 50점", output)
+
+    def test_hint_with_wrong_answer_gets_zero(self):
+        game = self.make_game()
+        self.give_hints(game)
+        output = self.play(game, ["1", "h", "2"])
+        self.assertIn("이번 점수: 0점", output)
+
+    def test_quiz_without_hint_rejects_h(self):
+        game = self.make_game()  # 힌트가 없는 퀴즈
+        output = self.play(game, ["1", "h", "1"])
+        self.assertNotIn("[힌트]", output)
+        self.assertEqual(output.count("  ! "), 1)
+        self.assertIn("이번 점수: 100점", output)
+
+    def test_read_int_accepts_command(self):
+        with mock.patch("builtins.input", side_effect=[" H "]):
+            value, _ = quiet(read_int, "> ", 1, 4, ("h",))
+        self.assertEqual(value, "h")
+
+    def test_half_points_score(self):
+        self.assertEqual(QuizGame.calculate_score(7.5, 8), 94)
+        self.assertEqual(QuizGame.calculate_score(0.5, 1), 50)
+
 
 if __name__ == "__main__":
     unittest.main()

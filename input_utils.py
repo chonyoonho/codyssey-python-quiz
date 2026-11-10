@@ -5,7 +5,7 @@
 """
 
 
-def read_int(prompt, low, high):
+def read_int(prompt, low, high, commands=()):
     """low 이상 high 이하의 정수를 입력받아 돌려준다.
 
     처리하는 경우:
@@ -13,16 +13,22 @@ def read_int(prompt, low, high):
     - 빈 입력(그냥 Enter)이면 안내 후 다시 입력받는다.
     - 숫자가 아니면(예: abc) 안내 후 다시 입력받는다.
     - 범위 밖의 숫자면(예: 메뉴 9) 안내 후 다시 입력받는다.
+
+    commands: 숫자 대신 허용할 명령 글자 목록 (예: ("h",)).
+    명령 글자를 입력하면 숫자 대신 그 글자(소문자)를 돌려준다.
     """
+    allowed = "숫자" if not commands else "숫자 또는 " + "/".join(commands)
     while True:
         text = input(prompt).strip()
         if text == "":
-            print("  ! 아무것도 입력하지 않았습니다. 숫자를 입력해 주세요.")
+            print(f"  ! 아무것도 입력하지 않았습니다. {allowed}를 입력해 주세요.")
             continue
+        if text.lower() in commands:
+            return text.lower()
         try:
             number = int(text)
         except ValueError:
-            print(f"  ! '{text}'은(는) 숫자가 아닙니다. 숫자만 입력해 주세요.")
+            print(f"  ! '{text}'은(는) 숫자가 아닙니다. {allowed}만 입력해 주세요.")
             continue
         if number < low or number > high:
             print(f"  ! {low}~{high} 사이의 숫자를 입력해 주세요.")
